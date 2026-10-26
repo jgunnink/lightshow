@@ -870,6 +870,9 @@ if __name__ == "__main__":
         run_web()
     elif "--daemon" in sys.argv:
         run_daemon()
+    elif "--install-cron" in sys.argv:
+        update_user_crontab(load_state())
+        print("Installed crontab entries.")
     elif "--install" in sys.argv:
         if os.geteuid() != 0:
             print(f"Please run --install with sudo: sudo {SCRIPT_PATH} --install")
