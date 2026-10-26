@@ -82,6 +82,7 @@ DEFAULT_STATE = {
     "claude_message": "",
     "claude_timeout_mins": 30,
     "simulated_state": None,  # None, "normal", "updates", "critical", "claude", "off"
+    "simulated_at": None,
     "updates_cache": {
         "checked_at": 0,
         "regular_count": 0,
@@ -219,6 +220,12 @@ def evaluate_desired_color(state, force_update_check=False):
         if timeout_mins > 0 and (time.time() - state["claude_notified_at"] > timeout_mins * 60):
             state["claude_notification"] = False
             state["claude_message"] = ""
+
+    if state.get("simulated_state"):
+        sim_at = state.get("simulated_at")
+        if not sim_at or (time.time() - sim_at > 60):
+            state["simulated_state"] = None
+            state["simulated_at"] = None
 
     sim = state.get("simulated_state")
     if sim:
@@ -745,6 +752,7 @@ class WebHandler(http.server.BaseHTTPRequestHandler):
 
         if self.path == "/api/simulate":
             state["simulated_state"] = data.get("simulated_state")
+            state["simulated_at"] = time.time() if state["simulated_state"] else None
             if state["simulated_state"] is None:
                 state["mode"] = "auto"
             save_state(state)
@@ -754,6 +762,7 @@ class WebHandler(http.server.BaseHTTPRequestHandler):
             state["claude_notification"] = False
             state["claude_message"] = ""
             state["simulated_state"] = None
+            state["simulated_at"] = None
             save_state(state)
             state = sync_lights(force_update_check=False, force_hardware=True)
             self._send_json({"ok": True, "state": state})
@@ -765,6 +774,8 @@ class WebHandler(http.server.BaseHTTPRequestHandler):
             state = sync_lights(force_update_check=False, force_hardware=True)
             self._send_json({"ok": True, "state": state})
         elif self.path == "/api/refresh-updates":
+            state["simulated_state"] = None
+            state["simulated_at"] = None
             check_system_updates(state, force=True)
             save_state(state)
             state = sync_lights(force_update_check=False, force_hardware=True)
@@ -831,6 +842,7 @@ if __name__ == "__main__":
         if val == "auto":
             state["mode"] = "auto"
             state["simulated_state"] = None
+            state["simulated_at"] = None
             save_state(state)
             sync_lights(force_update_check=False, force_hardware=True)
             print("Switched lights to AUTO rule mode.")
@@ -838,6 +850,7 @@ if __name__ == "__main__":
             chosen_rgb = parse_color(val)
             state["mode"] = rgb_to_hex(chosen_rgb)
             state["simulated_state"] = None
+            state["simulated_at"] = None
             save_state(state)
             sync_lights(force_update_check=False, force_hardware=True)
             print(f"Set manual light colour to {val} ({rgb_to_hex(chosen_rgb)}).")
@@ -855,6 +868,8 @@ if __name__ == "__main__":
         state["claude_notification"] = True
         state["claude_notified_at"] = time.time()
         state["claude_message"] = msg
+        state["simulated_state"] = None
+        state["simulated_at"] = None
         save_state(state)
         sync_lights(force_update_check=False, force_hardware=True)
     elif "--claude-clear" in sys.argv:
@@ -865,6 +880,11 @@ if __name__ == "__main__":
             save_state(state)
             sync_lights(force_update_check=False, force_hardware=True)
     elif "--sync" in sys.argv:
+        state = load_state()
+        if state.get("simulated_state"):
+            state["simulated_state"] = None
+            state["simulated_at"] = None
+            save_state(state)
         sync_lights(force_update_check=True, force_hardware=True)
     elif "--web" in sys.argv:
         run_web()
